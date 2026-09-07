@@ -1,9 +1,9 @@
 ## Diseño 
 ### Pantalla Inicio
-![Pantalla Inicio](design/PantallaInicio.jpg)
+<img src="design/PantallaInicio.jpg" alt="Dashboard" width="600"/>
 
 ### Pantalla Reglas
-![Pantalla Reglas](design/PantallaMode.jpg)
+<img src="design/PantallaMode.jpg" alt="Dashboard" width="600"/>
 
 ### Pantalla Estadisticas
-![Pantalla Estadisticas](design/PantallaEstadisticas.jpg)
+<img src="design/PantallaEstadisticas.jpg" alt="Dashboard" width="600" />
