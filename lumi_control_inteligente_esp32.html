@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LUMI - Sistema Inteligente de Iluminación ESP32</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            lumi: {
+              bg: '#0F151F',
+              card: '#161F2E',
+              cardBorder: '#1F2E45',
+              cyan: '#38BDF8',
+              glowCyan: 'rgba(56, 189, 248, 0.45)',
+              neonGreen: '#10B981',
+              neonAmber: '#F59E0B',
+              alertRed: '#EF4444'
+            }
+          },
+          boxShadow: {
+            'glow-cyan': '0 0 25px rgba(56, 189, 248, 0.35)',
+            'glow-cyan-sm': '0 0 12px rgba(56, 189, 248, 0.25)',
+            'glow-green': '0 0 20px rgba(16, 185, 129, 0.35)',
+            'glow-alert': '0 0 25px rgba(239, 68, 68, 0.45)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar & range input styling */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      background: transparent;
+    }
+    input[type=range]:focus {
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 6px;
+      cursor: pointer;
+      background: #1e293b;
+      border-radius: 4px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      height: 20px;
+      width: 20px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+      cursor: pointer;
+      -webkit-appearance: none;
+      margin-top: -7px;
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+    /* Switch toggle */
+    .toggle-checkbox:checked {
+      right: 0;
+      border-color: #38bdf8;
+      background-color: #38bdf8;
+    }
+    .toggle-checkbox:checked + .toggle-label {
+      background-color: #0284c7;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-start p-2 sm:p-4 selection:bg-cyan-500 selection:text-white font-sans antialiased">
+
+  <main class="w-full max-w-[430px] min-h-[860px] bg-[#111827] rounded-[40px] shadow-2xl border border-slate-800 flex flex-col relative overflow-hidden my-auto pb-6">
+    
+    <!-- Top Bar: Brand, ESP32 Connectivity and Simulated Time -->
+    <header class="pt-7 px-7 pb-3 flex justify-between items-center z-10">
+      <div class="flex flex-col">
+        <h1 class="text-2xl font-black tracking-wider text-cyan-400 drop-shadow-[0_0_12px_rgba(56,189,248,0.5)]">LUMI</h1>
+        <span id="simulatedClockDisplay" class="text-[10px] text-slate-400 font-mono tracking-wide">Hora: 14:30:00</span>
+      </div>
+      
+      <div class="flex items-center space-x-2 bg-slate-900/80 backdrop-blur px-3 py-1.5 rounded-full border border-slate-800">
+        <span class="text-xs text-slate-300 font-medium" id="connText">Conectado al ESP32</span>
+        <span id="connIndicator" class="relative flex h-2.5 w-2.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Content Views Wrapper -->
+    <div class="flex-1 px-5 py-2 overflow-y-auto relative space-y-4 pb-20">
+      
+      <!-- ================= PANTALLA 1: INICIO ================= -->
+      <section id="view-inicio" class="space-y-4 transition-all duration-300">
+        <!-- Main Circular Dial Card -->
+        <div class="relative bg-[#162032]/80 backdrop-blur border border-[#1e2e4a] rounded-3xl p-6 flex flex-col items-center justify-center shadow-lg">
+          <h2 class="text-slate-200 text-lg font-semibold mb-4">Luz Principal</h2>
+          
+          <!-- Circular Interactive Gauge SVG -->
+          <div class="relative w-48 h-48 flex items-center justify-center group">
+            <svg class="w-full h-full -rotate-90 transform" viewBox="0 0 160 160">
+              <!-- Background Circle Track -->
+              <circle cx="80" cy="80" r="64" class="text-slate-800/80 stroke-current" stroke-width="12" fill="transparent" />
+              <!-- Active Progress Stroke -->
+              <circle id="dialProgress" cx="80" cy="80" r="64" 
+                class="text-cyan-400 stroke-current transition-all duration-300 drop-shadow-[0_0_10px_rgba(56,189,248,0.7)]" 
+                stroke-width="12" 
+                stroke-dasharray="402.12" 
+                stroke-dashoffset="100.53" 
+                stroke-linecap="round" 
+                fill="transparent" />
+            </svg>
+            
+            <!-- Dial Center Content -->
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <div class="w-28 h-28 rounded-full bg-[#111a29] border border-slate-700/60 shadow-inner flex flex-col items-center justify-center pointer-events-none">
+                <span id="lightPercentageLabel" class="text-3xl font-extrabold text-cyan-300 drop-shadow">75%</span>
+                <span id="powerStatusBadge" class="text-[11px] font-semibold text-emerald-400 mt-0.5">ENCENDIDO</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Intensity Adjustment Slider -->
+          <div class="w-full mt-4 flex items-center space-x-3 px-2">
+            <svg class="w-4 h-4 text-slate-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/></svg>
+            <input type="range" id="mainBrightnessSlider" min="0" max="100" value="75" class="w-full">
+            <span class="text-xs font-mono text-cyan-300 w-8 text-right" id="sliderValLabel">75%</span>
+          </div>
+
+          <div class="mt-2 text-sm text-slate-300 font-medium">
+            Estado: <span id="mainPowerStateText" class="text-cyan-400 font-semibold">Encendido</span>
+          </div>
+        </div>
+
+        <!-- Mode Toggle Segment: Auto vs Manual -->
+        <div class="grid grid-cols-2 gap-2 bg-[#141d2d] p-1.5 rounded-2xl border border-slate-800">
+          <button id="btnModeAuto" class="flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-semibold text-sm transition-all duration-200 bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>Modo Automático</span>
+          </button>
+          
+          <button id="btnModeManual" class="flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-semibold text-sm transition-all duration-200 text-slate-400 hover:text-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"/></svg>
+            <span>Modo Manual</span>
+          </button>
+        </div>
+
+        <!-- Real-time Sensors Readouts (PIR & LDR) -->
+        <div class="grid grid-cols-2 gap-3">
+          <!-- PIR sensor card -->
+          <div id="pirCard" class="bg-gradient-to-br from-[#1b2b2b] to-[#122223] border border-emerald-500/30 p-3.5 rounded-2xl flex items-center space-x-3 shadow-md transition-colors duration-300">
+            <div class="p-2.5 bg-emerald-500/20 text-emerald-300 rounded-xl">
+              <!-- Walking icon -->
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7a2 2 0 100-4 2 2 0 000 4zm-3 7l2 1 3-3m-3 3v5m0-5l-2-2m-1-4l4 1 2 2"/></svg>
+            </div>
+            <div>
+              <div class="text-[11px] text-emerald-300/80 font-medium uppercase tracking-wider">Sensor PIR</div>
+              <div id="pirStatusText" class="text-base font-bold text-emerald-200">Ocupado</div>
+            </div>
+          </div>
+
+          <!-- LDR Lux card -->
+          <div class="bg-[#141e2e] border border-cyan-500/30 p-3.5 rounded-2xl flex items-center space-x-3 shadow-md">
+            <div class="p-2.5 bg-cyan-500/20 text-cyan-300 rounded-xl">
+              <!-- Bulb icon -->
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            </div>
+            <div>
+              <div class="text-[11px] text-cyan-300/80 font-medium uppercase tracking-wider">Sensor LDR</div>
+              <div id="ldrLuxText" class="text-base font-bold text-cyan-200">420 Lux</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Atajos Rápidos -->
+        <div class="space-y-2 pt-1">
+          <h3 class="text-xs uppercase font-bold tracking-wider text-slate-400">Atajos Rápidos</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <button id="btnQuickDay" class="py-3 px-4 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-semibold text-sm rounded-2xl border border-cyan-500/30 transition-all active:scale-95 shadow-[0_0_10px_rgba(56,189,248,0.15)] flex items-center justify-center space-x-2">
+              <span>Modo Día</span>
+            </button>
+            <button id="btnQuickNight" class="py-3 px-4 bg-[#182338] hover:bg-[#1f2e4a] text-slate-200 font-semibold text-sm rounded-2xl border border-slate-700/60 transition-all active:scale-95 flex items-center justify-center space-x-2">
+              <span>Modo Noche</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= PANTALLA 2: REGLAS ================= -->
+      <section id="view-reglas" class="space-y-4 hidden transition-all duration-300">
+        <!-- Tiempo de Inactividad -->
+        <div class="bg-[#152132] border border-slate-800/80 rounded-2xl p-4 shadow-lg space-y-3">
+          <div class="flex justify-between items-center">
+            <h3 class="font-semibold text-slate-100 text-sm">Tiempo de Inactividad</h3>
+            <span id="inactivityValueBadge" class="text-xs font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-800/50 px-2.5 py-0.5 rounded-full">5 min</span>
+          </div>
+          <input type="range" id="inactivitySlider" min="1" max="30" value="5" class="w-full">
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>1 min</span>
+            <span>30 min</span>
+          </div>
+        </div>
+
+        <!-- Modo Noche Card -->
+        <div class="bg-[#152132] border border-slate-800/80 rounded-2xl p-4 shadow-lg space-y-4">
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="font-semibold text-slate-100 text-sm">Modo Noche</h3>
+              <p class="text-[11px] text-slate-400">Atenuación suave programada</p>
+            </div>
+            <!-- Toggle Switch -->
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggleNightMode" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+            </label>
+          </div>
+
+          <!-- Slider Intensidad de Noche -->
+          <div class="space-y-1.5 pt-1">
+            <div class="flex justify-between text-xs text-slate-300">
+              <span class="flex items-center space-x-1.5">
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+                <span>Intensidad de Noche</span>
+              </span>
+              <span id="nightBrightnessLabel" class="font-mono text-cyan-300 font-bold">20%</span>
+            </div>
+            <input type="range" id="nightBrightnessSlider" min="5" max="60" value="20" class="w-full">
+          </div>
+
+          <!-- Horario Inicio y Fin -->
+          <div class="grid grid-cols-2 gap-3 pt-1">
+            <div class="space-y-1">
+              <label class="text-[11px] text-slate-400">Hora de Inicio:</label>
+              <div class="flex items-center bg-[#0d1624] border border-slate-700/70 rounded-xl px-2.5 py-1.5 focus-within:border-cyan-500">
+                <svg class="w-4 h-4 text-slate-400 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <input type="time" id="nightStartTime" value="22:00" class="bg-transparent text-sm text-slate-100 focus:outline-none w-full">
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-[11px] text-slate-400">Hora de Fin:</label>
+              <div class="flex items-center bg-[#0d1624] border border-slate-700/70 rounded-xl px-2.5 py-1.5 focus-within:border-cyan-500">
+                <svg class="w-4 h-4 text-slate-400 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <input type="time" id="nightEndTime" value="06:00" class="bg-transparent text-sm text-slate-100 focus:outline-none w-full">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modo Seguridad Card -->
+        <div class="bg-[#152132] border border-slate-800/80 rounded-2xl p-4 shadow-lg space-y-4">
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="font-semibold text-slate-100 text-sm">Modo Seguridad</h3>
+              <p class="text-[11px] text-slate-400">Alerta ante intrusión en horario restringido</p>
+            </div>
+            <!-- Toggle Switch -->
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggleSecurityMode" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+            </label>
+          </div>
+
+          <div class="space-y-1">
+            <span class="text-[11px] text-slate-400">Horario de Vigilancia:</span>
+            <div class="flex items-center space-x-2 text-xs text-slate-200 font-mono bg-[#0d1624] p-2.5 rounded-xl border border-slate-700/60">
+              <svg class="w-4 h-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <input type="time" id="secStartTime" value="23:00" class="bg-transparent border-b border-slate-600 focus:outline-none focus:border-rose-400">
+              <span>hasta</span>
+              <input type="time" id="secEndTime" value="05:00" class="bg-transparent border-b border-slate-600 focus:outline-none focus:border-rose-400">
+            </div>
+          </div>
+
+          <!-- Historial de Alertas Trigger Card -->
+          <button id="btnOpenAlertHistory" class="w-full text-left bg-gradient-to-r from-rose-950/40 via-red-900/20 to-transparent border border-rose-500/40 hover:border-rose-500 rounded-xl p-3 flex items-center justify-between group transition-all">
+            <div class="flex items-center space-x-3">
+              <div class="p-2 bg-rose-500/20 text-rose-400 rounded-lg group-hover:scale-110 transition-transform">
+                <svg class="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              </div>
+              <div>
+                <h4 class="text-sm font-semibold text-rose-200">Historial de Alertas</h4>
+                <p id="lastAlertText" class="text-[11px] text-rose-300/80">Última detección: 03:15 AM</p>
+              </div>
+            </div>
+            <svg class="w-4 h-4 text-rose-400 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= PANTALLA 3: ESTADÍSTICAS ================= -->
+      <section id="view-estadisticas" class="space-y-4 hidden transition-all duration-300">
+        <!-- Main Stats Card with Period Buttons -->
+        <div class="bg-[#152132] border border-slate-800 rounded-3xl p-5 shadow-lg space-y-4">
+          <!-- Segmented Filter: Día / Semana / Mes -->
+          <div class="flex bg-[#0c1420] p-1 rounded-2xl border border-slate-800">
+            <button class="stats-period-btn flex-1 py-1.5 rounded-xl text-xs font-semibold text-slate-400 transition-all" data-period="dia">Día</button>
+            <button class="stats-period-btn flex-1 py-1.5 rounded-xl text-xs font-semibold bg-cyan-400 text-slate-950 shadow-[0_0_12px_rgba(56,189,248,0.5)] transition-all" data-period="semana">Semana</button>
+            <button class="stats-period-btn flex-1 py-1.5 rounded-xl text-xs font-semibold text-slate-400 transition-all" data-period="mes">Mes</button>
+          </div>
+
+          <!-- Interactive Bar Chart Area -->
+          <div class="pt-2">
+            <div class="flex justify-between items-center text-xs text-slate-400 mb-2">
+              <span class="font-mono">kWh</span>
+              <span class="text-[11px] text-slate-500">Consumo registrado</span>
+            </div>
+            
+            <!-- Chart Graphic Container -->
+            <div class="relative h-44 w-full flex items-end justify-between px-2 pt-4 pb-2 border-b border-cyan-900/40">
+              <!-- Y-Axis Grid Guidelines -->
+              <div class="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
+                <div class="border-b border-cyan-400 w-full"></div>
+                <div class="border-b border-cyan-400 w-full"></div>
+                <div class="border-b border-cyan-400 w-full"></div>
+                <div class="border-b border-cyan-400 w-full"></div>
+                <div class="border-b border-cyan-400 w-full"></div>
+              </div>
+
+              <!-- Bars rendered dynamically -->
+              <div id="chartBarsContainer" class="relative z-10 w-full flex justify-between items-end h-full px-1">
+                <!-- Javascript will populate these bars -->
+              </div>
+            </div>
+
+            <!-- X-Axis Labels -->
+            <div id="chartXLabels" class="flex justify-between text-[11px] font-medium text-slate-400 px-3 pt-2">
+              <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metrics Cards: Ahorro Total & Consumo Semanal -->
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Ahorro Total -->
+          <div class="bg-[#152132] border border-emerald-500/30 rounded-2xl p-4 flex flex-col justify-between shadow-lg">
+            <span class="text-xs text-slate-300 font-medium">Ahorro Total:</span>
+            <div class="flex items-center space-x-2 mt-3">
+              <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center">
+                ECO
+              </span>
+              <span id="metricAhorro" class="text-2xl font-extrabold text-emerald-300">38%</span>
+            </div>
+          </div>
+
+          <!-- Consumo Semanal -->
+          <div class="bg-[#152132] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between shadow-lg">
+            <span id="metricPeriodTitle" class="text-xs text-slate-300 font-medium">Consumo Semanal:</span>
+            <div class="mt-3">
+              <span id="metricConsumo" class="text-2xl font-extrabold text-cyan-300">4.2 <span class="text-sm font-normal text-slate-300">kWh</span></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ================= BOTTOM NAVIGATION BAR ================= -->
+    <nav class="absolute bottom-0 left-0 right-0 h-16 bg-[#0f1725]/95 backdrop-blur-md border-t border-slate-800/80 px-8 flex justify-between items-center z-20">
+      <!-- Nav item: Inicio -->
+      <button id="nav-btn-inicio" class="nav-button group flex flex-col items-center justify-center space-y-1 text-cyan-400 focus:outline-none transition-colors">
+        <svg class="w-5 h-5 transition-transform group-hover:scale-110" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+        <span class="text-[11px] font-semibold tracking-wide">Inicio</span>
+        <div class="w-5 h-0.5 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.8)]"></div>
+      </button>
+
+      <!-- Nav item: Reglas -->
+      <button id="nav-btn-reglas" class="nav-button group flex flex-col items-center justify-center space-y-1 text-slate-500 hover:text-slate-300 focus:outline-none transition-colors">
+        <svg class="w-5 h-5 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        <span class="text-[11px] font-medium tracking-wide">Reglas</span>
+        <div class="w-5 h-0.5 bg-transparent rounded-full"></div>
+      </button>
+
+      <!-- Nav item: Estadísticas -->
+      <button id="nav-btn-estadisticas" class="nav-button group flex flex-col items-center justify-center space-y-1 text-slate-500 hover:text-slate-300 focus:outline-none transition-colors">
+        <svg class="w-5 h-5 transition-transform group-hover:scale-110" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        <span class="text-[11px] font-medium tracking-wide">Estadísticas</span>
+        <div class="w-5 h-0.5 bg-transparent rounded-full"></div>
+      </button>
+    </nav>
+  </main>
+
+  <!-- ================= SIMULADOR ESP32 Y CONSOLA DE PRUEBAS ================= -->
+  <aside class="w-full max-w-[430px] mt-4 bg-[#0f172a] border border-slate-800 rounded-3xl p-4 shadow-xl text-xs space-y-3">
+    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+      <div class="flex items-center space-x-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]"></span>
+        <h4 class="font-bold text-slate-200 tracking-wide uppercase text-[11px]">Simulador Hardware ESP32 & Sensores</h4>
+      </div>
+      <span class="text-[10px] text-cyan-300 font-mono">GPIO: OK</span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <!-- PIR Simulator Toggle -->
+      <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 space-y-1.5">
+        <div class="flex justify-between text-slate-300">
+          <span>Inyección Sensor PIR:</span>
+          <span id="simPirLabel" class="font-bold text-emerald-400">Presencia</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button id="simBtnPirMove" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-1 px-2 rounded-lg text-[10px] transition">
+            Detectar
+          </button>
+          <button id="simBtnPirClear" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-1 px-2 rounded-lg text-[10px] transition">
+            Despejar
+          </button>
+        </div>
+      </div>
+
+      <!-- WiFi link toggle -->
+      <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 space-y-1.5 flex flex-col justify-between">
+        <div class="flex justify-between text-slate-300">
+          <span>Enlace WiFi ESP32:</span>
+          <span id="simWifiStatus" class="font-bold text-emerald-400">Online</span>
+        </div>
+        <button id="simBtnToggleWifi" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-1 px-2 rounded-lg text-[10px] transition">
+          Alternar Conexión
+        </button>
+      </div>
+    </div>
+
+    <!-- LDR Lux slider simulator -->
+    <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 space-y-1">
+      <div class="flex justify-between text-slate-300">
+        <span>Luz Ambiental (LDR):</span>
+        <span id="simLdrVal" class="font-mono text-cyan-400 font-bold">420 Lux</span>
+      </div>
+      <input type="range" id="simLdrSlider" min="0" max="1000" value="420" class="w-full">
+      <div class="flex justify-between text-[10px] text-slate-500">
+        <span>0 Lux (Oscuridad)</span>
+        <span>500 Lux (Interior)</span>
+        <span>1000 Lux (Sol directo)</span>
+      </div>
+    </div>
+
+    <!-- Virtual Clock Stepper Simulator -->
+    <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between">
+      <div>
+        <span class="text-slate-300 font-medium">Reloj Embebido RTC:</span>
+        <p class="text-[10px] text-slate-500">Prueba los disparadores de horarios</p>
+      </div>
+      <div class="flex items-center space-x-1 font-mono">
+        <button id="btnTimeSub1h" class="px-2 py-0.5 bg-slate-800 rounded hover:bg-slate-700 text-cyan-300">-1h</button>
+        <span id="simTimeText" class="px-2 py-0.5 bg-slate-950 text-cyan-400 font-bold rounded">14:30</span>
+        <button id="btnTimeAdd1h" class="px-2 py-0.5 bg-slate-800 rounded hover:bg-slate-700 text-cyan-300">+1h</button>
+        <button id="btnTimeNightFast" title="Fijar a las 02:00 AM" class="px-2 py-0.5 bg-rose-900/60 border border-rose-600/40 text-rose-200 rounded text-[10px]">02:00h</button>
+      </div>
+    </div>
+
+    <!-- Telemetry JSON packet monitor -->
+    <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-900 font-mono text-[10px] text-slate-400 space-y-1">
+      <div class="flex justify-between text-[9px] text-slate-500 uppercase tracking-wider">
+        <span>Payload Telemetría (UART/WebSocket)</span>
+        <span class="text-emerald-400">STATUS: TX/RX OK</span>
+      </div>
+      <pre id="telemetryLog" class="text-cyan-300 truncate">{ "mode": "AUTO", "duty": 75, "pir": 1, "lux": 420, "secAlert": false }</pre>
+    </div>
+  </aside>
+
+  <!-- ================= MODAL HISTORIAL DE ALERTAS ================= -->
+  <div id="alertHistoryModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#141d2d] border border-rose-500/40 w-full max-w-md rounded-3xl p-5 shadow-glow-alert space-y-4 max-h-[85vh] flex flex-col">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div class="flex items-center space-x-2">
+          <div class="p-1.5 bg-rose-500/20 text-rose-400 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <h3 class="font-bold text-slate-100 text-sm">Historial de Eventos de Seguridad</h3>
+        </div>
+        <button id="btnCloseAlertModal" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Alerts List Container -->
+      <div id="alertListContainer" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+        <!-- Populated via JS -->
+      </div>
+
+      <div class="pt-2 border-t border-slate-800 flex justify-between items-center">
+        <button id="btnClearAlerts" class="text-xs text-rose-400 hover:underline">Vaciar registro</button>
+        <button id="btnDismissAlertModal" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-1.5 rounded-xl font-medium text-xs">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container for Alerts -->
+  <div id="toastNotification" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-50 hidden max-w-sm w-[90%] bg-rose-900 border border-rose-400 text-rose-100 px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 transition-all duration-300">
+    <span class="animate-ping h-3 w-3 rounded-full bg-rose-400 opacity-75"></span>
+    <div class="flex-1 text-xs font-medium" id="toastMessage">¡Intrusión detectada en Modo Seguridad!</div>
+  </div>
+
+  <script>
+    /* ==========================================================
+     * LUMI SYSTEM STATE & HARDWARE ABSTRACTION LAYER
+     * ========================================================== */
+    const LumiState = {
+      // Network & link
+      isEsp32Connected: true,
+      
+      // Illumination Main Actuator
+      lightBrightness: 75,   // 0 to 100%
+      isPowerOn: true,
+      mode: 'AUTO',          // 'AUTO' or 'MANUAL'
+      
+      // Hardware Sensors
+      pirOccupied: true,
+      ambientLux: 420,       // 0 to 1000 lux
+      luxThreshold: 300,     // Below this requires lighting in AUTO
+      
+      // Rules & Timers
+      inactivityTimeMinutes: 5,
+      lastMovementTimestamp: Date.now(),
+      
+      // Night Mode Settings
+      nightModeEnabled: true,
+      nightBrightness: 20,
+      nightStart: '22:00',
+      nightEnd: '06:00',
+      
+      // Security Mode Settings
+      securityModeEnabled: true,
+      securityStart: '23:00',
+      securityEnd: '05:00',
+      
+      // Virtual Clock (Hours and Minutes for testing automation)
+      currentSimTime: { hours: 14, minutes: 30, seconds: 0 },
+      
+      // Statistics data
+      statsPeriod: 'semana',
+      statsData: {
+        dia: {
+          labels: ['00h', '04h', '08h', '12h', '16h', '20h'],
+          values: [0.2, 0.1, 0.6, 1.2, 0.9, 1.4],
+          saving: '42%',
+          consumption: '0.8 kWh'
+        },
+        semana: {
+          labels: ['L', 'M', 'X', 'J', 'V', 'S', 'D'],
+          values: [3.0, 3.7, 2.8, 3.4, 4.8, 4.2, 2.2],
+          saving: '38%',
+          consumption: '4.2 kWh'
+        },
+        mes: {
+          labels: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'],
+          values: [18.4, 21.0, 16.5, 19.2],
+          saving: '35%',
+          consumption: '18.5 kWh'
+        }
+      },
+      
+      // Security Alerts History
+      alerts: [
+        { id: 1, time: 'Hoy - 03:15 AM', description: 'Movimiento sospechoso detectado en pasillo principal.' },
+        { id: 2, time: 'Ayer - 02:40 AM', description: 'Sensor PIR activado fuera de horario autorizado.' }
+      ]
+    };
+
+    const UI = {
+      // Views & Navigation
+      viewInicio: document.getElementById('view-inicio'),
+      viewReglas: document.getElementById('view-reglas'),
+      viewEstadisticas: document.getElementById('view-estadisticas'),
+      navBtnInicio: document.getElementById('nav-btn-inicio'),
+      navBtnReglas: document.getElementById('nav-btn-reglas'),
+      navBtnEstadisticas: document.getElementById('nav-btn-estadisticas'),
+
+      // Screen 1: Inicio
+      dialProgress: document.getElementById('dialProgress'),
+      lightPercentageLabel: document.getElementById('lightPercentageLabel'),
+      powerStatusBadge: document.getElementById('powerStatusBadge'),
+      mainPowerStateText: document.getElementById('mainPowerStateText'),
+      mainBrightnessSlider: document.getElementById('mainBrightnessSlider'),
+      sliderValLabel: document.getElementById('sliderValLabel'),
+      btnModeAuto: document.getElementById('btnModeAuto'),
+      btnModeManual: document.getElementById('btnModeManual'),
+      pirCard: document.getElementById('pirCard'),
+      pirStatusText: document.getElementById('pirStatusText'),
+      ldrLuxText: document.getElementById('ldrLuxText'),
+      btnQuickDay: document.getElementById('btnQuickDay'),
+      btnQuickNight: document.getElementById('btnQuickNight'),
+      connText: document.getElementById('connText'),
+      connIndicator: document.getElementById('connIndicator'),
+      simClockDisplay: document.getElementById('simulatedClockDisplay'),
+
+      // Screen 2: Reglas
+      inactivitySlider: document.getElementById('inactivitySlider'),
+      inactivityValueBadge: document.getElementById('inactivityValueBadge'),
+      toggleNightMode: document.getElementById('toggleNightMode'),
+      nightBrightnessSlider: document.getElementById('nightBrightnessSlider'),
+      nightBrightnessLabel: document.getElementById('nightBrightnessLabel'),
+      nightStartTime: document.getElementById('nightStartTime'),
+      nightEndTime: document.getElementById('nightEndTime'),
+      toggleSecurityMode: document.getElementById('toggleSecurityMode'),
+      secStartTime: document.getElementById('secStartTime'),
+      secEndTime: document.getElementById('secEndTime'),
+      btnOpenAlertHistory: document.getElementById('btnOpenAlertHistory'),
+      lastAlertText: document.getElementById('lastAlertText'),
+
+      // Screen 3: Estadísticas
+      periodButtons: document.querySelectorAll('.stats-period-btn'),
+      chartBarsContainer: document.getElementById('chartBarsContainer'),
+      chartXLabels: document.getElementById('chartXLabels'),
+      metricAhorro: document.getElementById('metricAhorro'),
+      metricConsumo: document.getElementById('metricConsumo'),
+      metricPeriodTitle: document.getElementById('metricPeriodTitle'),
+
+      // ESP32 Simulator Controls
+      simPirLabel: document.getElementById('simPirLabel'),
+      simBtnPirMove: document.getElementById('simBtnPirMove'),
+      simBtnPirClear: document.getElementById('simBtnPirClear'),
+      simWifiStatus: document.getElementById('simWifiStatus'),
+      simBtnToggleWifi: document.getElementById('simBtnToggleWifi'),
+      simLdrSlider: document.getElementById('simLdrSlider'),
+      simLdrVal: document.getElementById('simLdrVal'),
+      btnTimeSub1h: document.getElementById('btnTimeSub1h'),
+      btnTimeAdd1h: document.getElementById('btnTimeAdd1h'),
+      btnTimeNightFast: document.getElementById('btnTimeNightFast'),
+      simTimeText: document.getElementById('simTimeText'),
+      telemetryLog: document.getElementById('telemetryLog'),
+
+      // Modal & Notifications
+      alertHistoryModal: document.getElementById('alertHistoryModal'),
+      alertListContainer: document.getElementById('alertListContainer'),
+      btnCloseAlertModal: document.getElementById('btnCloseAlertModal'),
+      btnDismissAlertModal: document.getElementById('btnDismissAlertModal'),
+      btnClearAlerts: document.getElementById('btnClearAlerts'),
+      toastNotification: document.getElementById('toastNotification'),
+      toastMessage: document.getElementById('toastMessage')
+    };
+
+    function switchScreen(viewName) {
+      // Hide all
+      UI.viewInicio.classList.add('hidden');
+      UI.viewReglas.classList.add('hidden');
+      UI.viewEstadisticas.classList.add('hidden');
+
+      // Reset button styles
+      [UI.navBtnInicio, UI.navBtnReglas, UI.navBtnEstadisticas].forEach(btn => {
+        btn.classList.remove('text-cyan-400');
+        btn.classList.add('text-slate-500');
+        const marker = btn.querySelector('div');
+        if (marker) marker.className = 'w-5 h-0.5 bg-transparent rounded-full';
+      });
+
+      if (viewName === 'inicio') {
+        UI.viewInicio.classList.remove('hidden');
+        setNavActive(UI.navBtnInicio);
+      } else if (viewName === 'reglas') {
+        UI.viewReglas.classList.remove('hidden');
+        setNavActive(UI.navBtnReglas);
+      } else if (viewName === 'estadisticas') {
+        UI.viewEstadisticas.classList.remove('hidden');
+        setNavActive(UI.navBtnEstadisticas);
+        renderChart(LumiState.statsPeriod);
+      }
+    }
+
+    function setNavActive(buttonEl) {
+      buttonEl.classList.add('text-cyan-400');
+      buttonEl.classList.remove('text-slate-500');
+      const marker = buttonEl.querySelector('div');
+      if (marker) marker.className = 'w-5 h-0.5 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.8)]';
+    }
+
+    UI.navBtnInicio.addEventListener('click', () => switchScreen('inicio'));
+    UI.navBtnReglas.addEventListener('click', () => switchScreen('reglas'));
+    UI.navBtnEstadisticas.addEventListener('click', () => switchScreen('estadisticas'));
+
+    function updateActuatorUI() {
+      const percentage = LumiState.isPowerOn ? LumiState.lightBrightness : 0;
+      
+      // Update circular SVG gauge: circumference = 2 * PI * 64 ~= 402.12
+      const circumference = 402.12;
+      const offset = circumference - (percentage / 100) * circumference;
+      UI.dialProgress.style.strokeDashoffset = offset;
+
+      // Update Labels
+      UI.lightPercentageLabel.textContent = `${percentage}%`;
+      UI.sliderValLabel.textContent = `${percentage}%`;
+      UI.mainBrightnessSlider.value = LumiState.lightBrightness;
+
+      if (LumiState.isPowerOn && percentage > 0) {
+        UI.powerStatusBadge.textContent = 'ENCENDIDO';
+        UI.powerStatusBadge.className = 'text-[11px] font-semibold text-emerald-400 mt-0.5';
+        UI.mainPowerStateText.textContent = 'Encendido';
+        UI.mainPowerStateText.className = 'text-cyan-400 font-semibold';
+        UI.dialProgress.classList.add('drop-shadow-[0_0_12px_rgba(56,189,248,0.7)]');
+      } else {
+        UI.powerStatusBadge.textContent = 'APAGADO';
+        UI.powerStatusBadge.className = 'text-[11px] font-semibold text-slate-500 mt-0.5';
+        UI.mainPowerStateText.textContent = 'Apagado';
+        UI.mainPowerStateText.className = 'text-slate-500 font-semibold';
+        UI.dialProgress.classList.remove('drop-shadow-[0_0_12px_rgba(56,189,248,0.7)]');
+      }
+
+      // Sync Mode Switch UI
+      if (LumiState.mode === 'AUTO') {
+        UI.btnModeAuto.className = 'flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-semibold text-sm transition-all duration-200 bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 shadow-[0_0_15px_rgba(56,189,248,0.2)]';
+        UI.btnModeManual.className = 'flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-semibold text-sm transition-all duration-200 text-slate-400 hover:text-slate-200';
+      } else {
+        UI.btnModeManual.className = 'flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-semibold text-sm transition-all duration-200 bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 shadow-[0_0_15px_rgba(56,189,248,0.2)]';
+        UI.btnModeAuto.className = 'flex items-center justify-center space-x-2 py-3 px-3 rounded-xl font-semibold text-sm transition-all duration-200 text-slate-400 hover:text-slate-200';
+      }
+
+      broadcastESP32Telemetry();
+    }
+
+    function updateSensorsUI() {
+      // PIR Sensor Card
+      if (LumiState.pirOccupied) {
+        UI.pirStatusText.textContent = 'Ocupado';
+        UI.pirStatusText.className = 'text-base font-bold text-emerald-200';
+        UI.pirCard.className = 'bg-gradient-to-br from-[#1b2b2b] to-[#122223] border border-emerald-500/40 p-3.5 rounded-2xl flex items-center space-x-3 shadow-[0_0_15px_rgba(16,185,129,0.25)] transition-colors duration-300';
+        UI.simPirLabel.textContent = 'Presencia';
+        UI.simPirLabel.className = 'font-bold text-emerald-400';
+      } else {
+        UI.pirStatusText.textContent = 'Libre';
+        UI.pirStatusText.className = 'text-base font-bold text-slate-400';
+        UI.pirCard.className = 'bg-[#141e2e] border border-slate-700/60 p-3.5 rounded-2xl flex items-center space-x-3 shadow-md transition-colors duration-300';
+        UI.simPirLabel.textContent = 'Despejado';
+        UI.simPirLabel.className = 'font-bold text-slate-400';
+      }
+
+      // LDR Sensor Card
+      UI.ldrLuxText.textContent = `${LumiState.ambientLux} Lux`;
+      UI.simLdrVal.textContent = `${LumiState.ambientLux} Lux`;
+      UI.simLdrSlider.value = LumiState.ambientLux;
+
+      broadcastESP32Telemetry();
+    }
+
+    function isTimeInRange(currentH, currentM, startStr, endStr) {
+      const [sh, sm] = startStr.split(':').map(Number);
+      const [eh, em] = endStr.split(':').map(Number);
+
+      const cur = currentH * 60 + currentM;
+      const start = sh * 60 + sm;
+      const end = eh * 60 + em;
+
+      if (start <= end) {
+        return cur >= start && cur <= end;
+      } else {
+        // Range spans over midnight (e.g. 23:00 to 05:00)
+        return cur >= start || cur <= end;
+      }
+    }
+
+    function formatTime2Digits(val) {
+      return val < 10 ? '0' + val : val;
+    }
+
+    function runESP32AutonomousLoop() {
+      if (!LumiState.isEsp32Connected) return;
+
+      const { hours, minutes } = LumiState.currentSimTime;
+      const isNightTime = isTimeInRange(hours, minutes, LumiState.nightStart, LumiState.nightEnd);
+      const isSecurityTime = isTimeInRange(hours, minutes, LumiState.securityStart, LumiState.securityEnd);
+
+      // SECURITY MODE MONITORING
+      if (LumiState.securityModeEnabled && isSecurityTime && LumiState.pirOccupied) {
+        // Trigger Security Alert if motion detected within restricted window
+        triggerSecurityAlert(`Intrusión detectada a las ${formatTime2Digits(hours)}:${formatTime2Digits(minutes)} hrs`);
+      }
+
+      // AUTONOMOUS ILLUMINATION CONTROL (When in AUTO Mode)
+      if (LumiState.mode === 'AUTO') {
+        if (LumiState.pirOccupied) {
+          // Reset inactivity timestamp
+          LumiState.lastMovementTimestamp = Date.now();
+
+          // Low ambient light activates or adjusts intensity
+          if (LumiState.ambientLux < LumiState.luxThreshold) {
+            LumiState.isPowerOn = true;
+            if (LumiState.nightModeEnabled && isNightTime) {
+              // Dim to night brightness
+              LumiState.lightBrightness = LumiState.nightBrightness;
+            } else {
+              // Dynamic regulation: inversely proportional to remaining lux
+              // Example: Lux 50 -> 90%, Lux 280 -> 40%
+              const calculated = Math.min(100, Math.max(30, Math.round(100 - (LumiState.ambientLux / LumiState.luxThreshold) * 60)));
+              LumiState.lightBrightness = calculated;
+            }
+          } else {
+            // Abundant natural light: turn off lamp to conserve energy
+            LumiState.isPowerOn = false;
+          }
+        } else {
+          // When room is vacant: check inactivity duration
+          const elapsedMinutes = (Date.now() - LumiState.lastMovementTimestamp) / 1000 / 60;
+          if (elapsedMinutes >= LumiState.inactivityTimeMinutes) {
+            LumiState.isPowerOn = false;
+          }
+        }
+        updateActuatorUI();
+      }
+    }
+
+    let lastAlertTimestamp = 0;
+    function triggerSecurityAlert(message) {
+      const now = Date.now();
+      // Throttle alerts to avoid spamming within 10 seconds
+      if (now - lastAlertTimestamp < 10000) return;
+      lastAlertTimestamp = now;
+
+      const timeStr = `${formatTime2Digits(LumiState.currentSimTime.hours)}:${formatTime2Digits(LumiState.currentSimTime.minutes)} HRS`;
+      
+      // Register into Alert list
+      const newAlert = {
+        id: Date.now(),
+        time: `Hoy - ${timeStr}`,
+        description: message
+      };
+      LumiState.alerts.unshift(newAlert);
+      UI.lastAlertText.textContent = `Última detección: ${timeStr}`;
+
+      // Show Toast Notification
+      UI.toastMessage.textContent = `🚨 ALERTA: ${message}`;
+      UI.toastNotification.classList.remove('hidden');
+      setTimeout(() => {
+        UI.toastNotification.classList.add('hidden');
+      }, 4500);
+
+      renderAlertList();
+    }
+
+    function renderAlertList() {
+      UI.alertListContainer.innerHTML = '';
+      if (LumiState.alerts.length === 0) {
+        UI.alertListContainer.innerHTML = `
+          <div class="text-center py-6 text-slate-500">
+            No hay alertas registradas en el sistema.
+          </div>
+        `;
+        return;
+      }
+
+      LumiState.alerts.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'bg-slate-900/80 border border-rose-900/40 rounded-xl p-3 flex items-start space-x-2.5';
+        div.innerHTML = `
+          <div class="p-1.5 bg-rose-500/20 text-rose-400 rounded-lg shrink-0 mt-0.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <div class="flex-1">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-rose-300">${item.time}</span>
+              <span class="text-[9px] bg-rose-950 text-rose-400 px-1.5 py-0.5 rounded">INTRUSIÓN</span>
+            </div>
+            <p class="text-slate-300 text-[11px] mt-0.5">${item.description}</p>
+          </div>
+        `;
+        UI.alertListContainer.appendChild(div);
+      });
+    }
+
+    function broadcastESP32Telemetry() {
+      if (!LumiState.isEsp32Connected) {
+        UI.telemetryLog.textContent = '{ "error": "DISCONNECTED_ESP32_LINK" }';
+        return;
+      }
+      const payload = {
+        mode: LumiState.mode,
+        power: LumiState.isPowerOn,
+        duty: LumiState.isPowerOn ? LumiState.lightBrightness : 0,
+        pir: LumiState.pirOccupied ? 1 : 0,
+        lux: LumiState.ambientLux,
+        inactivityTimeout: LumiState.inactivityTimeMinutes,
+        securityActive: LumiState.securityModeEnabled
+      };
+      UI.telemetryLog.textContent = JSON.stringify(payload);
+    }
+
+    function renderChart(periodKey) {
+      const data = LumiState.statsData[periodKey];
+      if (!data) return;
+
+      UI.chartBarsContainer.innerHTML = '';
+      UI.chartXLabels.innerHTML = '';
+
+      const maxVal = Math.max(...data.values, 5);
+
+      data.values.forEach((val, index) => {
+        const heightPct = Math.round((val / maxVal) * 100);
+        
+        // Bar wrapper
+        const barWrapper = document.createElement('div');
+        barWrapper.className = 'flex flex-col items-center justify-end h-full w-full px-1 group cursor-pointer';
+        
+        // Tooltip & Bar column
+        barWrapper.innerHTML = `
+          <div class="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-cyan-300 bg-slate-900 border border-slate-700 px-1 py-0.5 rounded mb-1 whitespace-nowrap">
+            ${val} kWh
+          </div>
+          <div class="w-full max-w-[28px] rounded-t-lg transition-all duration-500 bg-gradient-to-t from-cyan-600/40 via-cyan-400 to-cyan-300 border-t-2 border-cyan-200 drop-shadow-[0_0_8px_rgba(56,189,248,0.5)]" style="height: ${heightPct}%;"></div>
+        `;
+        UI.chartBarsContainer.appendChild(barWrapper);
+
+        // X Label
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = data.labels[index];
+        UI.chartXLabels.appendChild(labelSpan);
+      });
+
+      // Update Card Metrics
+      UI.metricAhorro.textContent = data.saving;
+      UI.metricConsumo.innerHTML = `${data.consumption.split(' ')[0]} <span class="text-sm font-normal text-slate-300">kWh</span>`;
+      
+      const periodTitles = { dia: 'Consumo Diario:', semana: 'Consumo Semanal:', mes: 'Consumo Mensual:' };
+      UI.metricPeriodTitle.textContent = periodTitles[periodKey];
+    }
+
+    // Period selector button listeners
+    UI.periodButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        UI.periodButtons.forEach(b => {
+          b.className = 'stats-period-btn flex-1 py-1.5 rounded-xl text-xs font-semibold text-slate-400 transition-all';
+        });
+        btn.className = 'stats-period-btn flex-1 py-1.5 rounded-xl text-xs font-semibold bg-cyan-400 text-slate-950 shadow-[0_0_12px_rgba(56,189,248,0.5)] transition-all';
+        LumiState.statsPeriod = btn.getAttribute('data-period');
+        renderChart(LumiState.statsPeriod);
+      });
+    });
+
+    // Brightness Slider
+    UI.mainBrightnessSlider.addEventListener('input', (e) => {
+      LumiState.lightBrightness = parseInt(e.target.value);
+      LumiState.isPowerOn = LumiState.lightBrightness > 0;
+      updateActuatorUI();
+    });
+
+    // Mode Buttons: Auto / Manual
+    UI.btnModeAuto.addEventListener('click', () => {
+      LumiState.mode = 'AUTO';
+      runESP32AutonomousLoop();
+      updateActuatorUI();
+    });
+
+    UI.btnModeManual.addEventListener('click', () => {
+      LumiState.mode = 'MANUAL';
+      updateActuatorUI();
+    });
+
+    // Quick presets
+    UI.btnQuickDay.addEventListener('click', () => {
+      LumiState.isPowerOn = true;
+      LumiState.lightBrightness = 90;
+      updateActuatorUI();
+    });
+
+    UI.btnQuickNight.addEventListener('click', () => {
+      LumiState.isPowerOn = true;
+      LumiState.lightBrightness = LumiState.nightBrightness;
+      updateActuatorUI();
+    });
+
+    // Rules Screen Listeners
+    UI.inactivitySlider.addEventListener('input', (e) => {
+      LumiState.inactivityTimeMinutes = parseInt(e.target.value);
+      UI.inactivityValueBadge.textContent = `${LumiState.inactivityTimeMinutes} min`;
+    });
+
+    UI.toggleNightMode.addEventListener('change', (e) => {
+      LumiState.nightModeEnabled = e.target.checked;
+      runESP32AutonomousLoop();
+    });
+
+    UI.nightBrightnessSlider.addEventListener('input', (e) => {
+      LumiState.nightBrightness = parseInt(e.target.value);
+      UI.nightBrightnessLabel.textContent = `${LumiState.nightBrightness}%`;
+      runESP32AutonomousLoop();
+    });
+
+    UI.nightStartTime.addEventListener('change', (e) => {
+      LumiState.nightStart = e.target.value;
+      runESP32AutonomousLoop();
+    });
+
+    UI.nightEndTime.addEventListener('change', (e) => {
+      LumiState.nightEnd = e.target.value;
+      runESP32AutonomousLoop();
+    });
+
+    UI.toggleSecurityMode.addEventListener('change', (e) => {
+      LumiState.securityModeEnabled = e.target.checked;
+      runESP32AutonomousLoop();
+    });
+
+    UI.secStartTime.addEventListener('change', (e) => {
+      LumiState.securityStart = e.target.value;
+      runESP32AutonomousLoop();
+    });
+
+    UI.secEndTime.addEventListener('change', (e) => {
+      LumiState.securityEnd = e.target.value;
+      runESP32AutonomousLoop();
+    });
+
+    // Alert Modal Toggles
+    UI.btnOpenAlertHistory.addEventListener('click', () => {
+      renderAlertList();
+      UI.alertHistoryModal.classList.remove('hidden');
+    });
+
+    UI.btnCloseAlertModal.addEventListener('click', () => {
+      UI.alertHistoryModal.classList.add('hidden');
+    });
+
+    UI.btnDismissAlertModal.addEventListener('click', () => {
+      UI.alertHistoryModal.classList.add('hidden');
+    });
+
+    UI.btnClearAlerts.addEventListener('click', () => {
+      LumiState.alerts = [];
+      renderAlertList();
+      UI.lastAlertText.textContent = 'Sin alertas registradas';
+    });
+
+    UI.simBtnPirMove.addEventListener('click', () => {
+      LumiState.pirOccupied = true;
+      LumiState.lastMovementTimestamp = Date.now();
+      updateSensorsUI();
+      runESP32AutonomousLoop();
+    });
+
+    UI.simBtnPirClear.addEventListener('click', () => {
+      LumiState.pirOccupied = false;
+      // Fast-forward inactivity to simulate expiration immediately
+      LumiState.lastMovementTimestamp = Date.now() - (LumiState.inactivityTimeMinutes * 60 * 1000 + 1000);
+      updateSensorsUI();
+      runESP32AutonomousLoop();
+    });
+
+    UI.simLdrSlider.addEventListener('input', (e) => {
+      LumiState.ambientLux = parseInt(e.target.value);
+      updateSensorsUI();
+      runESP32AutonomousLoop();
+    });
+
+    UI.simBtnToggleWifi.addEventListener('click', () => {
+      LumiState.isEsp32Connected = !LumiState.isEsp32Connected;
+      if (LumiState.isEsp32Connected) {
+        UI.connText.textContent = 'Conectado al ESP32';
+        UI.connIndicator.innerHTML = `
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        `;
+        UI.simWifiStatus.textContent = 'Online';
+        UI.simWifiStatus.className = 'font-bold text-emerald-400';
+      } else {
+        UI.connText.textContent = 'Desconectado';
+        UI.connIndicator.innerHTML = `
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+        `;
+        UI.simWifiStatus.textContent = 'Offline';
+        UI.simWifiStatus.className = 'font-bold text-rose-400';
+      }
+      broadcastESP32Telemetry();
+    });
+
+    // Virtual Clock Time Steppers
+    function updateClockDisplay() {
+      const hStr = formatTime2Digits(LumiState.currentSimTime.hours);
+      const mStr = formatTime2Digits(LumiState.currentSimTime.minutes);
+      const sStr = formatTime2Digits(LumiState.currentSimTime.seconds);
+      
+      UI.simClockDisplay.textContent = `Hora: ${hStr}:${mStr}:${sStr}`;
+      UI.simTimeText.textContent = `${hStr}:${mStr}`;
+      runESP32AutonomousLoop();
+    }
+
+    UI.btnTimeSub1h.addEventListener('click', () => {
+      LumiState.currentSimTime.hours = (LumiState.currentSimTime.hours + 23) % 24;
+      updateClockDisplay();
+    });
+
+    UI.btnTimeAdd1h.addEventListener('click', () => {
+      LumiState.currentSimTime.hours = (LumiState.currentSimTime.hours + 1) % 24;
+      updateClockDisplay();
+    });
+
+    UI.btnTimeNightFast.addEventListener('click', () => {
+      LumiState.currentSimTime.hours = 2;
+      LumiState.currentSimTime.minutes = 0;
+      updateClockDisplay();
+    });
+
+    // Virtual Real-Time Clock Ticker (Advances simulated seconds)
+    setInterval(() => {
+      LumiState.currentSimTime.seconds += 1;
+      if (LumiState.currentSimTime.seconds >= 60) {
+        LumiState.currentSimTime.seconds = 0;
+        LumiState.currentSimTime.minutes += 1;
+        if (LumiState.currentSimTime.minutes >= 60) {
+          LumiState.currentSimTime.minutes = 0;
+          LumiState.currentSimTime.hours = (LumiState.currentSimTime.hours + 1) % 24;
+        }
+      }
+      updateClockDisplay();
+    }, 1000);
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateSensorsUI();
+      updateActuatorUI();
+      updateClockDisplay();
+      renderChart('semana');
+    });
+  </script>
+</body>
+</html>
