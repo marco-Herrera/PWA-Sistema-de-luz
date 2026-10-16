@@ -1,493 +1,134 @@
-/* ============================================================
-   LUMI · Prototipo funcional (frontend)
-   ------------------------------------------------------------
-   Este archivo simula el comportamiento del sistema embebido
-   (ESP32 + sensores PIR/LDR + relé/dimmer) para poder probar
-   toda la interfaz sin hardware conectado.
 
-   Para conectarlo al ESP32 real:
-   1) Cambia SIMULATION_MODE a false.
-   2) Ajusta ESP32_BASE_URL a la IP/mDNS de tu placa
-      (ej. "http://lumi.local" o "http://192.168.1.50").
-   3) En el ESP32, expón endpoints REST (o un WebSocket) que
-      respondan/acepten el mismo formato de datos usado aquí,
-      por ejemplo:
-        GET  /api/status   -> { power, brightness, mode, pir, ldr }
-        POST /api/light    <- { power, brightness }
-        POST /api/mode     <- { mode: "auto" | "manual" }
-        GET  /api/history?range=dia|semana|mes
-        POST /api/rules    <- { inactivityMin, night: {...}, security: {...} }
-      Cada función marcada con "🔌 ESP32:" indica dónde reemplazar
-      el mock por la llamada real (fetch/WebSocket).
-   ============================================================ */
+const imageSet=[
+ {name:'Recámara',url:'https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=800&q=80'},
+ {name:'Sala',url:'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=800&q=80'},
+ {name:'Cocina',url:'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80'},
+ {name:'Baño',url:'https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&w=800&q=80'},
+ {name:'Estudio',url:'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=800&q=80'},
+ {name:'Comedor',url:'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=800&q=80'}
+];
+let rooms=[
+ {id:1,name:'Recámara',devices:2,on:true,brightness:80,image:0},
+ {id:2,name:'Sala',devices:3,on:true,brightness:60,image:1},
+ {id:3,name:'Cocina',devices:2,on:false,brightness:0,image:2},
+ {id:4,name:'Baño',devices:1,on:true,brightness:70,image:3},
+ {id:5,name:'Estudio',devices:2,on:false,brightness:0,image:4}
+];
+let selectedImage=0,editingId=null,notificationsEnabled=true,autoMode=false,deviceOn=false;
+const $=s=>document.querySelector(s);
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2600)}
+function renderRooms(filter=''){
+ const root=$('#rooms');root.innerHTML='';
+ const filtered=rooms.filter(r=>r.name.toLowerCase().includes(filter.toLowerCase()));
+ filtered.forEach(r=>{
+  const el=document.createElement('article');el.className='room';
+  el.innerHTML=`<img src="${imageSet[r.image].url}" alt="Fotografía ilustrativa de ${r.name}" loading="lazy"><div class="room-info"><div class="room-title"><strong>${escapeHtml(r.name)}</strong><button class="switch ${r.on?'on':''}" data-toggle="${r.id}" aria-label="Encender ${escapeHtml(r.name)}"></button></div><small>${r.devices} ${r.devices===1?'dispositivo':'dispositivos'}</small><div class="brightness"><span>☼</span><input type="range" min="0" max="100" value="${r.brightness}" data-bright="${r.id}" aria-label="Brillo de ${escapeHtml(r.name)}"><span>${r.brightness}%</span></div><div style="display:flex;gap:6px;margin-top:10px"><button class="secondary" data-edit="${r.id}" style="font-size:11px;padding:5px 8px">Editar</button><button class="secondary" data-delete="${r.id}" style="font-size:11px;padding:5px 8px">Eliminar</button></div></div>`;
+  root.appendChild(el);
+ });
+ const create=document.createElement('button');create.className='create-room';create.innerHTML='<span class="plus">＋</span><b>Crear habitación</b><small>Personaliza un nuevo espacio en tu hogar.</small>';create.onclick=()=>openModal();root.appendChild(create);
+ $('#roomCount').textContent=rooms.length;$('#lightsOn').textContent=rooms.filter(r=>r.on).length+' encendidas';
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function openModal(id=null){editingId=id;const r=rooms.find(x=>x.id===id);$('#modalTitle').textContent=r?'Editar habitación':'Crear habitación';$('#roomName').value=r?r.name:'';$('#roomDevices').value=(r?r.devices:1)+' dispositivo'+((r?r.devices:1)===1?'':'s');selectedImage=r?r.image:0;renderImageChoices();$('#roomModal').classList.add('show');$('#roomName').focus()}
+function renderImageChoices(){const root=$('#imageChoices');root.innerHTML='';imageSet.forEach((im,i)=>{const b=document.createElement('button');b.className='image-choice '+(i===selectedImage?'active':'');b.innerHTML=`<img src="${im.url}" alt="${im.name}">`;b.title=im.name;b.onclick=()=>{selectedImage=i;renderImageChoices()};root.appendChild(b)})}
+function closeModal(){$('#roomModal').classList.remove('show')}
+function saveRoom(){const name=$('#roomName').value.trim();if(!name){toast('Escribe un nombre para la habitación.');$('#roomName').focus();return}const devices=parseInt($('#roomDevices').value,10)||1;if(editingId){const r=rooms.find(x=>x.id===editingId);Object.assign(r,{name,devices,image:selectedImage});toast('Habitación actualizada.')}else{rooms.push({id:Date.now(),name,devices,on:false,brightness:0,image:selectedImage});toast('Habitación creada correctamente.')}closeModal();renderRooms($('#search').value);refreshScheduleRooms()}
+function setRoomPower(id,on){const r=rooms.find(x=>x.id===id);if(!r)return;r.on=on;if(!on)r.brightness=0;else if(r.brightness===0)r.brightness=70;renderRooms($('#search').value);toast(`${r.name}: luz ${on?'encendida':'apagada'} (modo demo)`);updateAllSwitch()}
+function updateAllSwitch(){$('#allLights').classList.toggle('on',rooms.some(r=>r.on));$('#mainPower').textContent=deviceOn?'Apagar':'Encender';}
+$('#rooms').addEventListener('click',e=>{const t=e.target.closest('[data-toggle]');if(t){const r=rooms.find(x=>x.id===+t.dataset.toggle);setRoomPower(r.id,!r.on);return}const edit=e.target.closest('[data-edit]');if(edit){openModal(+edit.dataset.edit);return}const del=e.target.closest('[data-delete]');if(del){const r=rooms.find(x=>x.id===+del.dataset.delete);if(confirm(`¿Eliminar la habitación "${r.name}"?`)){rooms=rooms.filter(x=>x.id!==r.id);renderRooms($('#search').value);refreshScheduleRooms();toast('Habitación eliminada.')}return}});
+$('#rooms').addEventListener('input',e=>{if(e.target.matches('[data-bright]')){const r=rooms.find(x=>x.id===+e.target.dataset.bright);r.brightness=+e.target.value;r.on=r.brightness>0;const val=e.target.parentElement.querySelector('span:last-child');val.textContent=r.brightness+'%';const card=e.target.closest('.room');card.querySelector('.switch').classList.toggle('on',r.on);$('#lightsOn').textContent=rooms.filter(x=>x.on).length+' encendidas';updateAllSwitch()}});
+$('#newRoom').onclick=()=>openModal();$('#saveRoom').onclick=saveRoom;$('#cancelRoom').onclick=closeModal;$('#roomModal').addEventListener('click',e=>{if(e.target.id==='roomModal')closeModal()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();if(e.key==='Enter'&&$('#roomModal').classList.contains('show'))saveRoom()});
+$('#allLights').onclick=()=>{const turnOn=!rooms.every(r=>r.on);rooms.forEach(r=>{r.on=turnOn;r.brightness=turnOn?Math.max(r.brightness,70):0});renderRooms($('#search').value);toast(`Todas las luces ${turnOn?'encendidas':'apagadas'} (modo demo)`);updateAllSwitch()};
+$('#notificationToggle').onclick=()=>{notificationsEnabled=!notificationsEnabled;$('#notificationToggle').classList.toggle('on',notificationsEnabled);toast('Notificaciones '+(notificationsEnabled?'activadas':'desactivadas'))};
+$('#autoMode').onclick=()=>{autoMode=!autoMode;$('#autoMode').classList.toggle('on',autoMode);toast('Modo automático '+(autoMode?'activado':'desactivado')+' (modo demo)')};
+$('#mainPower').onclick=()=>{deviceOn=!deviceOn;$('#mainPower').textContent=deviceOn?'Apagar':'Encender';toast('Foco principal '+(deviceOn?'encendido':'apagado')+' (modo demo)')};
+$('#deviceSettings').onclick=()=>navigateTo('Ajustes');
+$('#scenes').addEventListener('click',e=>{const b=e.target.closest('[data-scene]');if(!b)return;document.querySelectorAll('.scene').forEach(x=>x.classList.toggle('selected',x===b));const scene=b.dataset.scene;$('#sceneCount').textContent='1';if(scene==='Noche')rooms.forEach(r=>{r.on=true;r.brightness=Math.min(r.brightness||25,35)});if(scene==='Estudio'){rooms.forEach(r=>{if(r.name.toLowerCase().includes('estudio')){r.on=true;r.brightness=100}})}if(scene==='Relajación')rooms.forEach(r=>{r.on=true;r.brightness=40});if(scene==='Película')rooms.forEach(r=>{r.on=true;r.brightness=20});renderRooms($('#search').value);toast('Escena '+scene+' activada (modo demo)')});
+$('#search').addEventListener('input',e=>renderRooms(e.target.value));
+$('#notifications').onclick=()=>navigateTo('Notificaciones');
+$('#viewAll').onclick=()=>navigateTo('Notificaciones');$('#viewActivity').onclick=()=>navigateTo('Notificaciones');
+$('#theme').onclick=()=>{document.body.classList.toggle('warm');if(document.body.classList.contains('warm')){document.body.style.filter='hue-rotate(20deg)';toast('Ambiente visual cálido')}else{document.body.style.filter='';toast('Ambiente azul restaurado')}};
 
-const SIMULATION_MODE = true;
-const ESP32_BASE_URL = "http://lumi.local"; // usar cuando SIMULATION_MODE = false
-
-const STORAGE_KEY = "lumi-state-v1";
-
-/* ---------- Estado central de la app ---------- */
-const defaultState = {
-  power: true,
-  brightness: 75,
-  mode: "auto", // "auto" | "manual"
-  pir: true,
-  ldr: 420,
-  inactivityMin: 5,
-  night: { enabled: true, intensity: 60, start: "22:00", end: "06:00" },
-  security: {
-    enabled: true,
-    start: "23:00",
-    end: "05:00",
-    alerts: [{ label: "Última detección: 03:15 AM" }]
-  },
-  savingsPct: 38,
-  weeklyKwh: 4.2,
-  history: {
-    dia: { labels: ["00", "04", "08", "12", "16", "20"], values: [0.1, 0.05, 0.3, 0.6, 0.5, 0.8] },
-    semana: { labels: ["L", "M", "X", "J", "V", "S", "D"], values: [2.9, 3.7, 2.8, 3.3, 4.7, 4.1, 2.2] },
-    mes: { labels: ["S1", "S2", "S3", "S4"], values: [18.4, 21.2, 19.8, 23.6] }
-  }
+/* Cada área principal tiene su propio apartado. Habitaciones sigue integrado en Inicio. */
+const mainPane = $('.main');
+mainPane.classList.add('single-page');
+const pageIntro = document.createElement('section');
+pageIntro.className = 'page-intro'; pageIntro.hidden = true;
+$('.topbar').insertAdjacentElement('afterend',pageIntro);
+const uiSections = {
+ hero:$('.hero'), stats:$('.stats'), rooms:$('#roomsSection'),
+ energy:$('.bottom-grid > .section:first-child'), quick:$('.bottom-grid > .section:nth-child(2)'),
+ device:$('.right > .section:nth-child(1)'), scenes:$('.right > .section:nth-child(2)'),
+ notifications:$('.right > .section:nth-child(3)'), activity:$('.right > .section:nth-child(4)'),
+ schedule:$('#schedulePanel'), settings:$('#settingsPanel')
 };
-
-let state = loadState();
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(defaultState);
-    return { ...structuredClone(defaultState), ...JSON.parse(raw) };
-  } catch {
-    return structuredClone(defaultState);
-  }
+const pages = {
+ 'Inicio':{title:'Inicio',subtitle:'Resumen de tu hogar inteligente.',sections:['hero','stats','rooms','quick']},
+ 'Dispositivos':{title:'Dispositivos',subtitle:'Consulta y controla los equipos de iluminación.',sections:['device']},
+ 'Escenas':{title:'Escenas',subtitle:'Elige un ambiente para cada momento.',sections:['scenes']},
+ 'Horarios':{title:'Horarios',subtitle:'Programa acciones de iluminación por hora y frecuencia.',sections:['schedule']},
+ 'Estadísticas':{title:'Estadísticas',subtitle:'Consulta el resumen visual del consumo de energía.',sections:['energy']},
+ 'Notificaciones':{title:'Notificaciones',subtitle:'Revisa los avisos y la actividad reciente.',sections:['notifications','activity']},
+ 'Ajustes':{title:'Ajustes',subtitle:'Personaliza preferencias de visualización y automatización.',sections:['settings']}
+};
+function navigateTo(page,options={}){
+ const config=pages[page]||pages.Inicio, visible=new Set(config.sections);
+ Object.entries(uiSections).forEach(([key,element])=>{if(element)element.hidden=!visible.has(key)});
+ pageIntro.hidden=page==='Inicio';
+ pageIntro.innerHTML=pageIntro.hidden?'':`<h2>${config.title}</h2><p>${config.subtitle}</p>`;
+ mainPane.scrollTo({top:0,behavior:options.instant?'auto':'smooth'});
+ document.querySelectorAll('#nav [data-page]').forEach(btn=>{
+  const active=btn.dataset.page===(options.activeItem||page);btn.classList.toggle('active',active);
+  if(active){btn.classList.remove('icon-tap');void btn.offsetWidth;btn.classList.add('icon-tap');setTimeout(()=>btn.classList.remove('icon-tap'),520)}
+ });
+ $('.search').placeholder=page==='Inicio'?'⌕  Buscar habitaciones, dispositivos, escenas...':`⌕  Buscar en ${page.toLowerCase()}...`;
+ if(options.scrollRooms)setTimeout(()=>{const target=uiSections.rooms;const top=target.getBoundingClientRect().top-mainPane.getBoundingClientRect().top+mainPane.scrollTop-16;mainPane.scrollTo({top:Math.max(0,top),behavior:'smooth'});target.classList.remove('nav-focus');void target.offsetWidth;target.classList.add('nav-focus');setTimeout(()=>target.classList.remove('nav-focus'),1200)},80);
 }
-
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch { /* almacenamiento no disponible: se ignora */ }
-}
-
-/* ============================================================
-   NAVEGACIÓN ENTRE VISTAS
-   ============================================================ */
-const navButtons = document.querySelectorAll(".nav-btn");
-const views = document.querySelectorAll(".view");
-
-navButtons.forEach((btn) => {
-  btn.addEventListener("click", () => switchView(btn.dataset.view, btn));
+$('#nav').addEventListener('click',event=>{
+ const button=event.target.closest('[data-page]');if(!button)return;
+ if(button.dataset.page==='Habitaciones')navigateTo('Inicio',{activeItem:'Habitaciones',scrollRooms:true});
+ else navigateTo(button.dataset.page);
 });
+$('#period').onchange=()=>{const bars=[38,20,35,55,24,47,30,70,43,64,52,81,45,68,51,88,36,57,41,27];document.querySelectorAll('.bar').forEach((b,i)=>b.style.height=Math.max(10,bars[i]*(($('#period').value==='Mes')?.75:($('#period').value==='Semana')?.9:1))+'%');toast('Periodo: '+$('#period').value)};
+function renderChart(){const vals=[12,20,30,18,25,45,30,55,38,70,48,60,42,85,55,62,38,52,35,22];$('#chart').innerHTML=vals.map(v=>`<div class="bar" style="height:${v}%"></div>`).join('')}
 
-function switchView(viewId, btn) {
-  views.forEach((v) => v.classList.toggle("view--active", v.id === viewId));
-  navButtons.forEach((b) => {
-    const active = b === btn;
-    b.classList.toggle("nav-btn--active", active);
-    b.setAttribute("aria-selected", active ? "true" : "false");
-  });
-}
+/* Gestión de horarios y preferencias locales de demostración */
+let schedules=[];
+function refreshScheduleRooms(){const select=$('#scheduleRoom');if(!select)return;const previous=select.value;select.innerHTML=rooms.map(r=>`<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');if(rooms.some(r=>String(r.id)===previous))select.value=previous;}
+function renderSchedules(){const root=$('#scheduleList');if(!root)return;if(!schedules.length){root.innerHTML='<div class="schedule-empty">◷<br><strong>No hay horarios creados todavía</strong><br><small>Configura una hora y pulsa “Crear horario”.</small></div>';return;}root.innerHTML=schedules.map(s=>{const room=rooms.find(r=>String(r.id)===String(s.roomId));return `<div class="schedule-item"><div class="schedule-time">${escapeHtml(s.time)}</div><div class="schedule-detail"><strong>${s.action==='on'?'Encender':'Apagar'} · ${escapeHtml(room?room.name:'Habitación eliminada')}</strong><small>${escapeHtml(s.days)} · Horario de demostración</small></div><button class="schedule-delete" data-delete-schedule="${s.id}">Eliminar</button></div>`}).join('');}
+$('#addSchedule').addEventListener('click',()=>{const time=$('#scheduleTime').value;if(!time){toast('Selecciona una hora para el horario.');$('#scheduleTime').focus();return;}schedules.push({id:Date.now(),roomId:$('#scheduleRoom').value,time,action:$('#scheduleAction').value,days:$('#scheduleDays').value});renderSchedules();toast('Horario agregado a la demostración.');});
+$('#scheduleList').addEventListener('click',event=>{const button=event.target.closest('[data-delete-schedule]');if(!button)return;schedules=schedules.filter(s=>s.id!==Number(button.dataset.deleteSchedule));renderSchedules();toast('Horario eliminado.');});
+$('#settingNotifications').addEventListener('click',()=>{notificationsEnabled=!notificationsEnabled;$('#settingNotifications').classList.toggle('on',notificationsEnabled);$('#notificationToggle').classList.toggle('on',notificationsEnabled);toast('Notificaciones '+(notificationsEnabled?'activadas':'desactivadas'));});
+$('#settingAutoMode').addEventListener('click',()=>{autoMode=!autoMode;$('#settingAutoMode').classList.toggle('on',autoMode);$('#autoMode').classList.toggle('on',autoMode);toast('Modo automático '+(autoMode?'activado':'desactivado')+' (modo demo)');});
+$('#settingWarmTheme').addEventListener('click',()=>{const warm=!document.body.classList.contains('warm');document.body.classList.toggle('warm',warm);document.body.style.filter=warm?'hue-rotate(20deg)':'';$('#settingWarmTheme').classList.toggle('on',warm);toast(warm?'Ambiente visual cálido activado':'Ambiente azul restaurado');});
 
-/* ============================================================
-   PANTALLA: INICIO
-   ============================================================ */
-const dial = document.getElementById("dial");
-const dialProgress = document.getElementById("dialProgress");
-const brightnessValue = document.getElementById("brightnessValue");
-const powerToggle = document.getElementById("powerToggle");
-const modeAutoBtn = document.getElementById("modeAuto");
-const modeManualBtn = document.getElementById("modeManual");
-const pirCard = document.getElementById("pirCard");
-const pirValue = document.getElementById("pirValue");
-const ldrValue = document.getElementById("ldrValue");
-const shortcutDay = document.getElementById("shortcutDay");
-const shortcutNight = document.getElementById("shortcutNight");
+refreshScheduleRooms();renderSchedules();
+renderRooms();renderChart();
+navigateTo('Inicio',{instant:true});
 
-const DIAL_RADIUS = 92;
-const DIAL_CIRC = 2 * Math.PI * DIAL_RADIUS;
-dialProgress.style.strokeDasharray = `${DIAL_CIRC}`;
 
-function renderDial() {
-  const pct = Math.max(0, Math.min(100, state.power ? state.brightness : 0));
-  const offset = DIAL_CIRC - (pct / 100) * DIAL_CIRC;
-  dialProgress.style.strokeDashoffset = offset;
-  brightnessValue.textContent = `${Math.round(pct)}%`;
-  dial.setAttribute("aria-valuenow", Math.round(pct));
-}
-
-function renderPower() {
-  powerToggle.textContent = state.power ? "Encendido" : "Apagado";
-  powerToggle.classList.toggle("state-value--off", !state.power);
-  renderDial();
-}
-
-function renderMode() {
-  const isAuto = state.mode === "auto";
-  modeAutoBtn.classList.toggle("segmented-btn--active", isAuto);
-  modeAutoBtn.setAttribute("aria-selected", isAuto ? "true" : "false");
-  modeManualBtn.classList.toggle("segmented-btn--active", !isAuto);
-  modeManualBtn.setAttribute("aria-selected", !isAuto ? "true" : "false");
-  // En modo manual el usuario puede arrastrar el dial; en automático lo decide el ESP32.
-  dial.style.cursor = isAuto ? "default" : "pointer";
-}
-
-function renderSensors() {
-  pirValue.textContent = state.pir ? "Ocupado" : "Libre";
-  pirCard.classList.toggle("sensor-card--active", state.pir);
-  ldrValue.textContent = `${Math.round(state.ldr)} Lux`;
-}
-
-powerToggle.addEventListener("click", () => {
-  state.power = !state.power;
-  renderPower();
-  saveState();
-  sendLightCommand(); // 🔌 ESP32: POST /api/light { power, brightness }
-});
-
-modeAutoBtn.addEventListener("click", () => setMode("auto"));
-modeManualBtn.addEventListener("click", () => setMode("manual"));
-
-function setMode(mode) {
-  state.mode = mode;
-  renderMode();
-  saveState();
-  sendModeCommand(); // 🔌 ESP32: POST /api/mode { mode }
-}
-
-shortcutDay.addEventListener("click", () => {
-  state.mode = "auto";
-  state.power = true;
-  state.brightness = 80;
-  renderMode(); renderPower();
-  saveState();
-  sendLightCommand();
-  sendModeCommand();
-});
-
-shortcutNight.addEventListener("click", () => {
-  state.mode = "manual";
-  state.power = true;
-  state.brightness = state.night.intensity;
-  renderMode(); renderPower();
-  saveState();
-  sendLightCommand();
-  sendModeCommand();
-});
-
-/* --- Interacción con el dial circular (solo en modo manual) --- */
-let draggingDial = false;
-
-function angleFromEvent(evt) {
-  const rect = dial.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const point = evt.touches ? evt.touches[0] : evt;
-  const dx = point.clientX - cx;
-  const dy = point.clientY - cy;
-  let deg = (Math.atan2(dy, dx) * 180) / Math.PI + 90; // 0° arriba
-  if (deg < 0) deg += 360;
-  return deg;
-}
-
-function setBrightnessFromAngle(evt) {
-  if (state.mode !== "manual") return;
-  const deg = angleFromEvent(evt);
-  const pct = Math.round((deg / 360) * 100);
-  state.brightness = Math.max(0, Math.min(100, pct));
-  state.power = state.brightness > 0;
-  renderPower();
-}
-
-dial.addEventListener("pointerdown", (e) => {
-  if (state.mode !== "manual") return;
-  draggingDial = true;
-  setBrightnessFromAngle(e);
-});
-window.addEventListener("pointermove", (e) => {
-  if (draggingDial) setBrightnessFromAngle(e);
-});
-window.addEventListener("pointerup", () => {
-  if (draggingDial) {
-    draggingDial = false;
-    saveState();
-    sendLightCommand(); // 🔌 ESP32: POST /api/light { power, brightness }
-  }
-});
-
-dial.addEventListener("keydown", (e) => {
-  if (state.mode !== "manual") return;
-  if (e.key === "ArrowUp" || e.key === "ArrowRight") {
-    state.brightness = Math.min(100, state.brightness + 5);
-  } else if (e.key === "ArrowDown" || e.key === "ArrowLeft") {
-    state.brightness = Math.max(0, state.brightness - 5);
-  } else return;
-  state.power = state.brightness > 0;
-  renderPower();
-  saveState();
-  sendLightCommand();
-});
-
-/* ============================================================
-   PANTALLA: REGLAS
-   ============================================================ */
-const connDot = document.getElementById("connDot");
-const inactivityRange = document.getElementById("inactivityRange");
-const inactivityValue = document.getElementById("inactivityValue");
-
-const nightModeToggle = document.getElementById("nightModeToggle");
-const nightModeBody = document.getElementById("nightModeBody");
-const nightIntensityRange = document.getElementById("nightIntensityRange");
-const nightStart = document.getElementById("nightStart");
-const nightEnd = document.getElementById("nightEnd");
-
-const securityModeToggle = document.getElementById("securityModeToggle");
-const securityModeBody = document.getElementById("securityModeBody");
-const securityStart = document.getElementById("securityStart");
-const securityEnd = document.getElementById("securityEnd");
-const lastAlert = document.getElementById("lastAlert");
-const alertBanner = document.getElementById("alertBanner");
-
-function fillSlider(input) {
-  const min = Number(input.min), max = Number(input.max), val = Number(input.value);
-  const pct = ((val - min) / (max - min)) * 100;
-  input.style.setProperty("--fill", `${pct}%`);
-}
-
-function renderRules() {
-  inactivityRange.value = state.inactivityMin;
-  inactivityValue.textContent = state.inactivityMin;
-  fillSlider(inactivityRange);
-
-  nightModeToggle.checked = state.night.enabled;
-  nightModeBody.style.opacity = state.night.enabled ? "1" : ".4";
-  nightModeBody.style.pointerEvents = state.night.enabled ? "auto" : "none";
-  nightIntensityRange.value = state.night.intensity;
-  fillSlider(nightIntensityRange);
-  nightStart.value = state.night.start;
-  nightEnd.value = state.night.end;
-
-  securityModeToggle.checked = state.security.enabled;
-  securityModeBody.style.opacity = state.security.enabled ? "1" : ".4";
-  securityModeBody.style.pointerEvents = state.security.enabled ? "auto" : "none";
-  securityStart.value = state.security.start;
-  securityEnd.value = state.security.end;
-  const alerts = state.security.alerts;
-  lastAlert.textContent = alerts.length
-    ? alerts[alerts.length - 1].label
-    : "Sin detecciones registradas";
-}
-
-inactivityRange.addEventListener("input", () => {
-  state.inactivityMin = Number(inactivityRange.value);
-  inactivityValue.textContent = state.inactivityMin;
-  fillSlider(inactivityRange);
-});
-inactivityRange.addEventListener("change", () => { saveState(); sendRules(); });
-
-nightModeToggle.addEventListener("change", () => {
-  state.night.enabled = nightModeToggle.checked;
-  renderRules();
-  saveState();
-  sendRules(); // 🔌 ESP32: POST /api/rules
-});
-
-nightIntensityRange.addEventListener("input", () => {
-  state.night.intensity = Number(nightIntensityRange.value);
-  fillSlider(nightIntensityRange);
-});
-nightIntensityRange.addEventListener("change", () => { saveState(); sendRules(); });
-
-nightStart.addEventListener("change", () => { state.night.start = nightStart.value; saveState(); sendRules(); });
-nightEnd.addEventListener("change", () => { state.night.end = nightEnd.value; saveState(); sendRules(); });
-
-securityModeToggle.addEventListener("change", () => {
-  state.security.enabled = securityModeToggle.checked;
-  renderRules();
-  saveState();
-  sendRules();
-});
-securityStart.addEventListener("change", () => { state.security.start = securityStart.value; saveState(); sendRules(); });
-securityEnd.addEventListener("change", () => { state.security.end = securityEnd.value; saveState(); sendRules(); });
-
-alertBanner.addEventListener("click", () => {
-  // En producción esto podría abrir un historial completo o una vista de log.
-  switchView("view-estadisticas", document.getElementById("tab-estadisticas"));
-});
-
-/* ============================================================
-   PANTALLA: ESTADÍSTICAS
-   ============================================================ */
-const chart = document.getElementById("chart");
-const rangeButtons = document.querySelectorAll(".range-btn");
-const savingsValue = document.getElementById("savingsValue");
-const weeklyValue = document.getElementById("weeklyValue");
-
-let currentRange = "semana";
-
-rangeButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    currentRange = btn.dataset.range;
-    rangeButtons.forEach((b) => {
-      const active = b === btn;
-      b.classList.toggle("range-btn--active", active);
-      b.setAttribute("aria-selected", active ? "true" : "false");
+/* Motion helpers: animate cards created dynamically without changing their behavior. */
+(function addDynamicMotion() {
+  const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion || !('IntersectionObserver' in window)) return;
+  const observeCards = () => {
+    document.querySelectorAll('.room:not([data-motion-ready]), .stat:not([data-motion-ready]), .section:not([data-motion-ready])').forEach((el, index) => {
+      el.dataset.motionReady = '1';
+      el.style.animationDelay = Math.min(index * 55, 330) + 'ms';
     });
-    renderChart();
-    loadHistory(currentRange); // 🔌 ESP32: GET /api/history?range=...
-  });
+  };
+  observeCards();
+  const root = document.querySelector('#rooms');
+  if (root) new MutationObserver(observeCards).observe(root, { childList: true });
+})();
+
+
+/* Efectos dinámicos para iconos pulsados en la barra y elementos recién creados. */
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button || button.closest('#nav')) return;
+  button.classList.remove('button-tap');
+  void button.offsetWidth;
+  button.classList.add('button-tap');
+  window.setTimeout(() => button.classList.remove('button-tap'), 420);
 });
-
-function renderChart() {
-  const { labels, values } = state.history[currentRange];
-  const W = 340, H = 300;
-  const paddingBottom = 30, paddingTop = 20;
-  const usableH = H - paddingBottom - paddingTop;
-  const maxVal = Math.max(...values) * 1.15 || 1;
-
-  const barGap = 14;
-  const barW = (W - barGap * (values.length + 1)) / values.length;
-
-  let svg = "";
-
-  // líneas de referencia horizontales
-  const gridLines = 4;
-  for (let i = 0; i <= gridLines; i++) {
-    const y = paddingTop + (usableH / gridLines) * i;
-    const val = (maxVal * (gridLines - i)) / gridLines;
-    svg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#233043" stroke-width="1"/>`;
-    svg += `<text x="0" y="${y - 6}" fill="#93a0b3" font-size="11">${val.toFixed(1)}</text>`;
-  }
-
-  values.forEach((v, i) => {
-    const barH = (v / maxVal) * usableH;
-    const x = barGap + i * (barW + barGap);
-    const y = paddingTop + usableH - barH;
-    svg += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(barH, 2)}"
-              rx="6" fill="none" stroke="#55d6f2" stroke-width="2.5"
-              style="filter:drop-shadow(0 0 6px rgba(85,214,242,.65))"></rect>`;
-    svg += `<text x="${x + barW / 2}" y="${H - paddingBottom + 20}" fill="#93a0b3"
-              font-size="13" text-anchor="middle">${labels[i]}</text>`;
-  });
-
-  chart.innerHTML = svg;
-}
-
-function renderStats() {
-  savingsValue.textContent = state.savingsPct;
-  weeklyValue.textContent = state.weeklyKwh.toFixed(1);
-}
-
-/* ============================================================
-   COMUNICACIÓN CON EL ESP32 (mock ↔ real)
-   ============================================================ */
-async function sendLightCommand() {
-  if (SIMULATION_MODE) return; // el mock ya actualizó el estado local
-  try {
-    await fetch(`${ESP32_BASE_URL}/api/light`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ power: state.power, brightness: state.brightness })
-    });
-  } catch (err) {
-    console.error("No se pudo contactar al ESP32 (light):", err);
-    setConnection(false);
-  }
-}
-
-async function sendModeCommand() {
-  if (SIMULATION_MODE) return;
-  try {
-    await fetch(`${ESP32_BASE_URL}/api/mode`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: state.mode })
-    });
-  } catch (err) {
-    console.error("No se pudo contactar al ESP32 (mode):", err);
-    setConnection(false);
-  }
-}
-
-async function sendRules() {
-  if (SIMULATION_MODE) return;
-  try {
-    await fetch(`${ESP32_BASE_URL}/api/rules`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inactivityMin: state.inactivityMin,
-        night: state.night,
-        security: state.security
-      })
-    });
-  } catch (err) {
-    console.error("No se pudo contactar al ESP32 (rules):", err);
-    setConnection(false);
-  }
-}
-
-async function loadHistory(range) {
-  if (SIMULATION_MODE) return; // ya usamos los datos mock guardados en state.history
-  try {
-    const res = await fetch(`${ESP32_BASE_URL}/api/history?range=${range}`);
-    const data = await res.json();
-    state.history[range] = data; // { labels: [...], values: [...] }
-    renderChart();
-  } catch (err) {
-    console.error("No se pudo obtener el historial del ESP32:", err);
-    setConnection(false);
-  }
-}
-
-function setConnection(isOnline) {
-  connDot.classList.toggle("conn-dot--on", isOnline);
-  connDot.classList.toggle("conn-dot--off", !isOnline);
-}
-
-/* --- Simulación de lecturas en tiempo real (solo demo) --- */
-function simulateSensors() {
-  if (!SIMULATION_MODE) return;
-
-  // Ruido leve en el sensor de luz ambiental (LDR)
-  state.ldr = Math.max(0, Math.round(state.ldr + (Math.random() - 0.5) * 30));
-
-  // El PIR cambia ocasionalmente de estado
-  if (Math.random() < 0.15) {
-    state.pir = !state.pir;
-  }
-
-  // Si está en modo automático, la luz reacciona a presencia + luz ambiental
-  if (state.mode === "auto") {
-    if (state.pir && state.ldr < 500) {
-      state.power = true;
-      state.brightness = Math.max(30, Math.min(100, Math.round(100 - state.ldr / 8)));
-    } else if (!state.pir) {
-      state.power = false;
-    }
-  }
-
-  renderSensors();
-  renderPower();
-}
-
-/* ============================================================
-   INICIALIZACIÓN
-   ============================================================ */
-function init() {
-  renderPower();
-  renderMode();
-  renderSensors();
-  renderRules();
-  renderChart();
-  renderStats();
-  setConnection(true);
-
-  setInterval(simulateSensors, 3000);
-
-  // Registro del Service Worker (PWA) — se ignora si no hay soporte o si se
-  // abre el archivo directamente (protocolo file://).
-  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    navigator.serviceWorker.register("service-worker.js").catch(() => {});
-  }
-}
-
-init();

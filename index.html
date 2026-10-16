@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LUMI | Sistema inteligente de iluminación</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+ <aside class="sidebar">
+  <div class="brand"><div class="bulb">💡</div><div><h1>LUMI</h1><p>Sistema inteligente<br>de iluminación</p></div></div>
+  <nav class="nav" id="nav">
+   <button class="active" data-page="Inicio"><span class="ico">⌂</span>Inicio</button>
+   <button data-page="Habitaciones"><span class="ico">⌂</span>Habitaciones</button>
+   <button data-page="Dispositivos"><span class="ico">▦</span>Dispositivos</button>
+   <button data-page="Escenas"><span class="ico">✧</span>Escenas</button>
+   <button data-page="Horarios"><span class="ico">◷</span>Horarios</button>
+   <button data-page="Estadísticas"><span class="ico">▥</span>Estadísticas</button>
+   <button data-page="Notificaciones"><span class="ico">♧</span>Notificaciones <span style="margin-left:auto;color:#ff637b">●</span></button>
+   <button data-page="Ajustes"><span class="ico">⚙</span>Ajustes</button>
+  </nav>
+  <div class="profile"><div class="avatar">👤</div><div><b>Misael Garibay</b><small>Usuario</small></div><span style="margin-left:auto">⌄</span></div>
+ </aside>
+ <main class="main">
+  <div class="topbar"><input class="search" id="search" placeholder="⌕  Buscar habitaciones, dispositivos, escenas..."><button class="round" id="notifications" title="Notificaciones">♧</button><button class="round" id="theme" title="Cambiar ambiente">☼</button><button class="round" title="Perfil">M</button></div>
+  <div class="content">
+   <section class="hero"><div><h2 id="greeting">¡Buenas noches, Misael!</h2><p>Tu hogar inteligente está listo para iluminar tu día.</p></div><div class="weather"><strong>☾ &nbsp;22°C</strong><small>Cielo despejado<br>15 de octubre, 2026</small></div></section>
+   <div class="stats">
+    <div class="stat"><div class="stat-icon">💡</div><div><b id="roomCount">3</b><small>Habitaciones<br><span id="lightsOn">2 encendidas</span></small></div></div>
+    <div class="stat"><div class="stat-icon">▦</div><div><b>1</b><small>Dispositivos<br><span class="green">● ESP32 conectado</span></small></div></div>
+    <div class="stat"><div class="stat-icon">🍃</div><div><b>0.8 kWh</b><small>Consumo hoy<br><span class="green">↓ -12%</span></small></div></div>
+    <div class="stat"><div class="stat-icon">◷</div><div><b id="sceneCount">2</b><small>Escenas activas<br><span>Noche, Estudio</span></small></div></div>
+   </div>
+   <section class="section" id="roomsSection"><div class="section-head"><div><h3>⌂ &nbsp;Habitaciones</h3><p>Controla y personaliza la iluminación de cada espacio.</p></div><button class="primary" id="newRoom">＋ Nueva habitación</button></div><div class="rooms" id="rooms"></div></section>
+   <div class="bottom-grid">
+    <section class="section"><div class="section-head"><h3>▥ &nbsp;Consumo de energía</h3><select id="period" style="background:#10274b;color:white;border:1px solid #34547e;border-radius:10px;padding:7px"><option>Hoy</option><option>Semana</option><option>Mes</option></select></div><b>0.8 kWh <span class="green" style="font-size:12px">↓ -12%</span></b><div class="chart" id="chart"></div><div style="display:flex;justify-content:space-between;color:var(--muted);font-size:10px"><span>00</span><span>04</span><span>08</span><span>12</span><span>16</span><span>20</span></div></section>
+    <section class="section"><div class="section-head"><h3>☼ &nbsp;Control rápido</h3></div><div class="quick-list"><div class="quick"><span>💡 &nbsp;Todas las luces</span><button class="switch on" id="allLights" aria-label="Todas las luces"></button></div><div class="quick"><span>♧ &nbsp;Notificaciones</span><button class="switch on" id="notificationToggle" aria-label="Notificaciones"></button></div><div class="quick"><span>◉ &nbsp;Modo automático</span><button class="switch" id="autoMode" aria-label="Modo automático"></button></div></div></section>
+   </div>
+  </div>
+  <aside class="right">
+   <section class="section"><div class="device-head"><h3>▦ &nbsp;Dispositivo principal</h3><span>⌃⌄</span></div><div class="device-card"><div class="device-top"><div class="board">▧</div><div style="flex:1"><b>ESP32</b><small style="display:block;margin-top:5px">LUMI-ESP32</small><span class="connected">Conectado · Demo</span></div><button class="round" id="deviceSettings" style="width:36px;height:36px">⚒</button></div><div class="device-line"><span>⌁ &nbsp;192.168.1.104</span><span>⚙</span></div><div class="device-line" style="border-top:0;margin-top:0"><span>♧ &nbsp;Foco principal</span><button class="secondary" id="mainPower">Encender</button></div></div></section>
+   <section class="section"><div class="section-head"><h3>ϟ &nbsp;Escenas rápidas</h3><span>⌃⌄</span></div><div class="scenes" id="scenes"><button class="scene selected" data-scene="Noche"><span class="scene-icon">🌙</span><span>Noche<small>Luz tenue y cálida</small></span></button><button class="scene" data-scene="Estudio"><span class="scene-icon">📖</span><span>Estudio<small>Luz blanca y brillante</small></span></button><button class="scene" data-scene="Relajación"><span class="scene-icon">🍃</span><span>Relajación<small>Ambiente cálido</small></span></button><button class="scene" data-scene="Película"><span class="scene-icon">▣</span><span>Película<small>Luz baja y ambiente</small></span></button></div></section>
+   <section class="section"><div class="section-head"><h3>♧ &nbsp;Notificaciones</h3><button class="secondary" id="viewAll" style="padding:6px 9px">Ver todas ›</button></div><div class="activity" id="notificationsList"><div class="activity-row"><i class="dot" style="background:#00d49a"></i>Sala encendida<small>Hace 2 min</small></div><div class="activity-row"><i class="dot"></i>Nuevo dispositivo conectado<small>Hace 15 min</small></div><div class="activity-row"><i class="dot" style="background:#b74cff"></i>Escena Noche activada<small>Hace 1 h</small></div><div class="activity-row"><i class="dot" style="background:#ff8b20"></i>Consumo bajo el promedio<small>Hace 2 h</small></div></div></section>
+   <section class="section"><div class="section-head"><h3>◉ &nbsp;Actividad reciente</h3><button class="secondary" id="viewActivity" style="padding:6px 9px">Ver todas ›</button></div><div class="activity" id="activityList"><div class="activity-row"><i class="dot" style="background:#ff526d"></i>Recámara apagada<small>Hace 5 min</small></div><div class="activity-row"><i class="dot" style="background:#00d49a"></i>Cocina encendida<small>Hace 12 min</small></div><div class="activity-row"><i class="dot" style="background:#82c99b"></i>Dispositivo ESP32 conectado<small>Hace 1 h</small></div><div class="activity-row"><i class="dot" style="background:#ff8b20"></i>Escena Estudio activada<small>Hace 2 h</small></div></div></section>
+  </aside>
+
+  <section class="section standalone-panel" id="schedulePanel" hidden>
+   <div class="section-head"><div><h3>◷ &nbsp;Horarios programados</h3><p>Programa cuándo quieres que se enciendan o apaguen tus luces.</p></div></div>
+   <div class="schedule-form">
+    <div class="field"><label for="scheduleRoom">Habitación</label><select id="scheduleRoom"></select></div>
+    <div class="field"><label for="scheduleTime">Hora</label><input id="scheduleTime" type="time" value="20:00"></div>
+    <div class="field"><label for="scheduleAction">Acción</label><select id="scheduleAction"><option value="on">Encender luz</option><option value="off">Apagar luz</option></select></div>
+    <div class="field"><label for="scheduleDays">Repetición</label><select id="scheduleDays"><option value="Diariamente">Todos los días</option><option value="Entre semana">Lunes a viernes</option><option value="Fin de semana">Fines de semana</option><option value="Una vez">Una vez</option></select></div>
+   </div>
+   <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="primary" id="addSchedule">＋ Crear horario</button></div>
+   <div class="schedule-list" id="scheduleList" aria-live="polite"></div>
+  </section>
+  <section class="section standalone-panel" id="settingsPanel" hidden>
+   <div class="section-head"><div><h3>⚙ &nbsp;Ajustes</h3><p>Personaliza el comportamiento de tu interfaz LUMI.</p></div></div>
+   <div class="settings-grid">
+    <div class="setting-row"><div><strong>Notificaciones</strong><small>Mostrar avisos dentro de la aplicación.</small></div><button class="switch on" id="settingNotifications" aria-label="Activar notificaciones"></button></div>
+    <div class="setting-row"><div><strong>Modo automático</strong><small>Activa el modo automático de demostración.</small></div><button class="switch" id="settingAutoMode" aria-label="Activar modo automático"></button></div>
+    <div class="setting-row"><div><strong>Ambiente visual cálido</strong><small>Cambia el tono azul por una apariencia más cálida.</small></div><button class="switch" id="settingWarmTheme" aria-label="Cambiar ambiente visual"></button></div>
+    <div class="setting-row"><div><strong>Animaciones</strong><small>Los efectos respetan la preferencia del navegador para reducir movimiento.</small></div><span class="settings-tag">Dinámicas</span></div>
+   </div>
+   <p class="settings-note">Estas preferencias funcionan localmente en esta maqueta. El control físico del ESP32 requiere conectar el backend/API.</p>
+  </section>
+ </main>
+</div>
+<div class="modal" id="roomModal"><div class="modal-box"><h2 id="modalTitle">Crear habitación</h2><div class="field"><label for="roomName">Nombre de la habitación</label><input id="roomName" maxlength="35" placeholder="Ej. Recámara principal"></div><div class="field"><label for="roomDevices">Número de dispositivos</label><select id="roomDevices"><option>1 dispositivo</option><option>2 dispositivos</option><option>3 dispositivos</option><option>4 dispositivos</option></select></div><div class="field"><label>Elige una imagen ilustrativa</label><div class="image-choices" id="imageChoices"></div></div><div class="modal-actions"><button class="secondary" id="cancelRoom">Cancelar</button><button class="primary" id="saveRoom">Guardar habitación</button></div></div></div>
+<div class="toast" id="toast"></div>
+<script src="script.js" defer></script>
+</body>
+</html>
